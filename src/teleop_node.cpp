@@ -213,6 +213,10 @@ void TeleopManipulator::PublishManipulatorCommand() {
 
   // --- Publish ---------------------------------------------------------------
   // The pre-allocated message is reused: no allocation in the control loop.
+  // `rclcpp::Time` converts implicitly to `builtin_interfaces::msg::Time`, so
+  // the node clock can be assigned straight into the header. Using the node
+  // clock (instead of std::chrono / system_clock) keeps the stamp consistent
+  // with the rest of the graph and honours `use_sim_time`.
   command_msg_.header.stamp = now;
   command_msg_.header.frame_id = pose.header.frame_id;
 
@@ -222,8 +226,27 @@ void TeleopManipulator::PublishManipulatorCommand() {
 }
 
 void TeleopManipulator::PublishZeroCommand() {
-  command_msg_.header.stamp = now();
+  command_msg_.transforms.clear();
+
+  // Stamp with the node clock at publish time, exactly like the normal command
+  // path, so the driver can order/expire commands consistently.
+  command_msg_.header.stamp = this->now();
+  command_msg_.header.frame_id = "";
+
+  geometry_msgs::msg::TransformStamped transform;
   // Publish all zeros
+  transform.transform.translation.x = 0.0;
+  transform.transform.translation.y = 0.0;
+  transform.transform.translation.z = 0.0;
+  transform.transform.rotation.x = 0.0;
+  transform.transform.rotation.y = 0.0;
+  transform.transform.rotation.z = 0.0;
+  transform.transform.rotation.w = 1.0;
+
+  command_msg_.transforms.push_back(transform);
+  command_msg_.acceleration = 0.5;
+  command_msg_.speed = 0.5;
+
   robot_command_publisher_->publish(command_msg_);
 }
 

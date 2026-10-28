@@ -1,0 +1,26 @@
+/**:
+  ros__parameters:
+    pose_topic: /optitrack/tool/pose
+    robot_description_topic: /robot_description
+    tcp_frame: tool0
+
+    robot:
+      type: kuka #ur
+      ip: 192.168.1.20
+      port: 49152
+      mode: position # match what your UDP protocol expects
+      period: 0.004 # e.g. RSI 4 ms. Match your controller cycle
+
+    ik:
+      damping: 0.05
+      gain_linear: 2.0
+      gain_angular: 2.0
+
+    mapping:
+      R_base_optitrack: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+      translation_scale: 1.0
+
+    safety:
+      max_joint_velocity: [0.5, 0.5, 0.5, 0.8, 0.8, 0.8]
+      limit_margin: 0.05
+      pose_timeout_ms: 50

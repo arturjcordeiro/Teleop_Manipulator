@@ -1,0 +1,27 @@
+# Test everything without hardware. Needs a robot_description publisher (e.g. UR view_ur.launch.py).
+/**:
+  ros__parameters:
+    pose_topic: /optitrack/tool/pose
+    robot_description_topic: /robot_description   # e.g. /ur5/robot_description if namespaced
+    tcp_frame: tool0
+
+    robot:
+      type: mock
+      mode: position
+      period: 0.002
+
+    ik:
+      damping: 0.05
+      gain_linear: 2.0
+      gain_angular: 2.0
+
+    mapping:
+      # OptiTrack -> robot base, row-major. Identity assumes Z-up streaming.
+      # Motive default (Y-up) example: [1,0,0, 0,0,-1, 0,1,0]
+      R_base_optitrack: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+      translation_scale: 1.0
+
+    safety:
+      max_joint_velocity: [0.5, 0.5, 0.5, 0.8, 0.8, 0.8]
+      limit_margin: 0.05
+      pose_timeout_ms: 50

@@ -3,6 +3,9 @@
     pose_topic: /optitrack/tool/pose
     robot_description_topic: /robot_description
     tcp_frame: tool0
+    # Manipulator base link. Empty = keep the whole URDF chain to the TCP
+    # and only lock side branches (e.g. wheels on a mobile base).
+    base_frame: ""
 
     robot:
       type: kuka #ur

@@ -18,6 +18,10 @@ public:
   struct Params {
     std::string urdf_xml;  // URDF content (from robot_description)
     std::string tcp_frame; // frame name in the URDF, e.g. "tool0"
+    // Optional manipulator base frame (e.g. the link the arm is mounted on).
+    // Everything below it is kept; mobile-base joints above it are locked.
+    // Empty: keep the whole chain to the TCP and only lock side branches.
+    std::string base_frame;
     double damping{
         0.05}; // DLS lambda: higher = safer near singularities, less accurate
     double gain_linear{2.0};  // [1/s] P-gain on position error

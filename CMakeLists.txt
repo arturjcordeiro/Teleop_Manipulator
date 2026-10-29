@@ -12,6 +12,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(ibot_common REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -42,10 +44,16 @@ target_link_libraries(teleop_core
 add_library(teleop_backends STATIC
   src/backends/mock_robot.cpp
   src/backends/kuka_udp_robot.cpp
+  src/backends/ur_sim_robot.cpp
   src/backends/robot_factory.cpp
 )
 target_compile_features(teleop_backends PUBLIC cxx_std_17)
-target_link_libraries(teleop_backends PUBLIC teleop_core)
+target_link_libraries(teleop_backends PUBLIC
+  teleop_core
+  rclcpp::rclcpp
+  sensor_msgs::sensor_msgs
+  std_msgs::std_msgs
+)
 
 
 
@@ -71,6 +79,7 @@ ament_target_dependencies(
   "rclcpp"
   "rclcpp_components"
   "geometry_msgs"
+  "sensor_msgs"
   "std_srvs"
   "ibot_common"
 )
@@ -117,6 +126,8 @@ ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   rclcpp
   geometry_msgs
+  sensor_msgs
+  std_msgs
   std_srvs
   ibot_common
   Eigen3
@@ -133,6 +144,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_pose_mapper test/test_pose_mapper.cpp)
   if(TARGET test_pose_mapper)
     target_link_libraries(test_pose_mapper teleop_core)
+  endif()
+
+  ament_add_gtest(test_diff_ik test/test_diff_ik.cpp)
+  if(TARGET test_diff_ik)
+    target_link_libraries(test_diff_ik teleop_core)
   endif()
 
   ament_lint_auto_find_test_dependencies()

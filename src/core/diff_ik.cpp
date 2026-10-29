@@ -3,10 +3,12 @@
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/jacobian.hpp>
 #include <pinocchio/algorithm/kinematics.hpp>
+#include <pinocchio/algorithm/model.hpp>
 #include <pinocchio/parsers/urdf.hpp>
 #include <pinocchio/spatial/explog.hpp>
 
 #include <stdexcept>
+#include <vector>
 
 namespace teleop {
 
@@ -20,12 +22,61 @@ struct DiffIK::Impl {
 
 DiffIK::DiffIK(const Params& params) : impl_(std::make_unique<Impl>()) {
   impl_->params = params;
-  pinocchio::urdf::buildModelFromXML(params.urdf_xml, impl_->model);
-  impl_->data = pinocchio::Data(impl_->model);
 
-  if (!impl_->model.existFrame(params.tcp_frame)) {
+  pinocchio::Model full;
+  pinocchio::urdf::buildModelFromXML(params.urdf_xml, full);
+
+  if (!full.existFrame(params.tcp_frame)) {
     throw std::invalid_argument("TCP frame '" + params.tcp_frame + "' not found in URDF");
   }
+  const auto tcp_frame_id = full.getFrameId(params.tcp_frame);
+
+  // Keep only the joints on the path from the manipulator base (or the URDF
+  // root) down to the TCP. Mobile-base joints (wheels, casters, ...) hang off
+  // side branches and must not take part in the IK.
+  pinocchio::JointIndex start = 0;
+  if (!params.base_frame.empty()) {
+    if (!full.existFrame(params.base_frame)) {
+      throw std::invalid_argument("Base frame '" + params.base_frame +
+                                  "' not found in URDF");
+    }
+    start = full.frames[full.getFrameId(params.base_frame)].parentJoint;
+  }
+
+  std::vector<bool> keep(static_cast<std::size_t>(full.njoints), false);
+  bool reached_start = (start == 0);
+  for (auto j = full.frames[tcp_frame_id].parentJoint; j != 0; j = full.parents[j]) {
+    if (j == start) {
+      reached_start = true;
+      break;
+    }
+    keep[j] = true;
+  }
+  if (!reached_start) {
+    throw std::invalid_argument("Base frame '" + params.base_frame +
+                                "' is not on the kinematic path to TCP frame '" +
+                                params.tcp_frame + "'");
+  }
+
+  std::vector<pinocchio::JointIndex> locks;
+  for (std::size_t j = 1; j < static_cast<std::size_t>(full.njoints); ++j) {
+    if (!keep[j] && full.joints[j].nv() > 0) {
+      locks.push_back(j);
+    }
+  }
+
+  if (locks.empty()) {
+    impl_->model = full;
+  } else {
+    impl_->model =
+        pinocchio::buildReducedModel(full, locks, pinocchio::neutral(full));
+  }
+
+  if (!impl_->model.existFrame(params.tcp_frame)) {
+    throw std::invalid_argument("TCP frame '" + params.tcp_frame +
+                                "' was pruned from the URDF model");
+  }
+  impl_->data = pinocchio::Data(impl_->model);
   impl_->tcp_id = impl_->model.getFrameId(params.tcp_frame);
   impl_->J = Eigen::MatrixXd::Zero(6, impl_->model.nv);
 }

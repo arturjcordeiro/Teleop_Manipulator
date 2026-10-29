@@ -23,6 +23,7 @@ Eigen::VectorXd toEigen(const std::vector<double> &v) {
 TeleopManipulator::TeleopManipulator(const rclcpp::NodeOptions &options)
     : rclcpp::Node("teleop_manipulator_node", options) {
   ik_params_.tcp_frame = declare_parameter<std::string>("tcp_frame", "tool0");
+  ik_params_.base_frame = declare_parameter<std::string>("base_frame", "");
   ik_params_.damping = declare_parameter<double>("ik.damping", 0.05);
   ik_params_.gain_linear = declare_parameter<double>("ik.gain_linear", 2.0);
   ik_params_.gain_angular = declare_parameter<double>("ik.gain_angular", 2.0);
@@ -69,6 +70,8 @@ TeleopManipulator::TeleopManipulator(const rclcpp::NodeOptions &options)
   pose_topic_ =
       declare_parameter<std::string>("pose_topic", "/optitrack/tool/pose");
 
+  RCLCPP_INFO(get_logger(), "Pose topic: %s ", pose_topic_.c_str());
+
   // ---- Wait for the robot model ----
   // robot_state_publisher publishes robot_description as transient_local
   // ("latched"), so we receive it even if it was published before we started.
@@ -98,11 +101,12 @@ TeleopManipulator::TeleopManipulator(const rclcpp::NodeOptions &options)
 
   // Best effort, depth 1: we always want the newest pose, never a backlog.
   tool_pose_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-      tool_pose_topic_, rclcpp::SensorDataQoS(),
+      pose_topic_, rclcpp::SensorDataQoS(),
       std::bind(&TeleopManipulator::ToolPoseCallback, this,
                 std::placeholders::_1),
       sub_options);
 
+  command_topic_ = "iiwa";
   robot_command_publisher_ = create_publisher<ibot_common::msg::ArmCommand>(
       command_topic_, rclcpp::QoS(1));
 
@@ -110,6 +114,7 @@ TeleopManipulator::TeleopManipulator(const rclcpp::NodeOptions &options)
   // Fixed-rate control loop. Publishing from a timer instead of from the pose
   // callback decouples the (jittery) input rate from the (smooth) output rate.
   // ---------------------------------------------------------------------------
+  control_rate_hz_ = 60;
   const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::duration<double>(1.0 / control_rate_hz_));
   control_timer_ = create_wall_timer(
@@ -132,6 +137,7 @@ void TeleopManipulator::onRobotDescription(
   if (robot_) {
     return; // already initialized; ignore re-publications
   }
+  RCLCPP_INFO(get_logger(), "Found robot description model");
 
   // ---- IK from the published URDF ----
   ik_params_.urdf_xml = msg->data;
@@ -140,6 +146,18 @@ void TeleopManipulator::onRobotDescription(
   // ---- Safety (joint limits from the URDF) ----
   safety_params_.lower_limits = ik_->lowerLimits();
   safety_params_.upper_limits = ik_->upperLimits();
+  // The configured velocity vector only applies if it matches the manipulator.
+  // Otherwise fall back to the URDF limits so a new arm needs no config edit.
+  if (safety_params_.max_joint_velocity.size() !=
+      static_cast<Eigen::Index>(ik_->dof())) {
+    RCLCPP_WARN(
+        get_logger(),
+        "safety.max_joint_velocity has %zu values but the manipulator "
+        "has %zu joints; using the URDF velocity limits",
+        static_cast<std::size_t>(safety_params_.max_joint_velocity.size()),
+        ik_->dof());
+    safety_params_.max_joint_velocity = ik_->velocityLimits();
+  }
   safety_ = std::make_unique<Safety>(safety_params_);
 
   // ---- Robot backend ----
@@ -309,7 +327,9 @@ void TeleopManipulator::step() {
     return;
   }
 
+  // request latest pose from Optitrack/tool topic
   const auto pose = latestPose();
+  // Verify if pose is fresh
   const bool pose_ok = pose && safety_->poseIsFresh(pose->stamp, Clock::now());
 
   // ---- Clutch state machine ----

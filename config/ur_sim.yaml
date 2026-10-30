@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    pose_topic: /teleop/target_pose
+    pose_topic: /probe/pose
     robot_description_topic: /robot_description # e.g. /ur5/robot_description if namespaced
     tcp_frame: tool0
     # Manipulator base link. Empty = keep the whole URDF chain to the TCP
@@ -10,11 +10,11 @@
     robot:
       type: ur_sim
       ip: 0.0.0.0
-      mode: position # servoJ (like GELLO). "velocity" -> speedJ
+      mode: position #  "velocity" -> speedJ
       period: 0.002 # e-Series 500 Hz. CB3: 0.008 (125 Hz)
       servo_lookahead: 0.1
       servo_gain: 300.0
-      acceleration: 1.0
+      acceleration: 2.0
 
     ik:
       damping: 0.05
@@ -27,5 +27,6 @@
 
     safety:
       max_joint_velocity: [0.3, 0.3, 0.4, 0.6, 0.6, 0.6] # UR10 is heavier: start slower
+      # max_joint_velocity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0] # UR10 is heavier: start slower
       limit_margin: 0.05
       pose_timeout_ms: 50

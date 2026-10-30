@@ -14,7 +14,6 @@ find_package(rclcpp_components REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(ibot_common REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(pinocchio REQUIRED)
@@ -81,7 +80,6 @@ ament_target_dependencies(
   "geometry_msgs"
   "sensor_msgs"
   "std_srvs"
-  "ibot_common"
 )
 
 rclcpp_components_register_node(teleop_manipulator_component
@@ -129,7 +127,6 @@ ament_export_dependencies(
   sensor_msgs
   std_msgs
   std_srvs
-  ibot_common
   Eigen3
   pinocchio
 )
@@ -149,6 +146,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_diff_ik test/test_diff_ik.cpp)
   if(TARGET test_diff_ik)
     target_link_libraries(test_diff_ik teleop_core)
+  endif()
+
+  ament_add_gtest(test_kuka_protocol test/test_kuka_protocol.cpp)
+  if(TARGET test_kuka_protocol)
+    target_link_libraries(test_kuka_protocol teleop_backends)
   endif()
 
   ament_lint_auto_find_test_dependencies()

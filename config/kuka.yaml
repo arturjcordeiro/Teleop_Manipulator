@@ -8,11 +8,21 @@
     base_frame: ""
 
     robot:
-      type: kuka #ur
-      ip: 192.168.1.20
-      port: 49152
-      mode: position # match what your UDP protocol expects
-      period: 0.004 # e.g. RSI 4 ms. Match your controller cycle
+      type: kuka
+      ip: 192.168.1.20       # KUKA cabinet running SmartServoPTP.java
+      port: 30300            # SmartServo command/reply port
+      mode: position         # position only; velocity is integrated by the driver
+      period: 0.004          # 250 Hz, matches the 4 ms cabinet cycle
+
+      # "joint"     -> 72-byte joint PTP, lowest overhead for joint-space IK
+      # "cartesian" -> 64-byte LIN, FK of the commanded joints
+      kuka_command: joint
+      kuka_speed_rel: 1.0    # joint PTP speed scale [0..1]
+      kuka_accel_rel: 1.0    # joint PTP acceleration scale [0..1]
+      kuka_speed_mm_s: 200.0 # cartesian-only
+      kuka_accel_mm_s2: 0.0  # cartesian-only, 0 = cabinet default
+
+      max_joint_step: 0.1    # [rad] reject targets further than this from q
 
     ik:
       damping: 0.05
@@ -24,6 +34,6 @@
       translation_scale: 1.0
 
     safety:
-      max_joint_velocity: [0.5, 0.5, 0.5, 0.8, 0.8, 0.8]
+      max_joint_velocity: [0.5, 0.5, 0.5, 0.8, 0.8, 0.8, 0.8]  # iiwa 14 is 7 DOF
       limit_margin: 0.05
       pose_timeout_ms: 50

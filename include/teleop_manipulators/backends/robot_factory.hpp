@@ -2,6 +2,7 @@
 // so adding a robot = one new backend class + one line in the factory.
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -24,7 +25,17 @@ struct RobotConfig {
   //
   int rt_priority{80}; // ur_rtde thread priority (needs rtprio permission)
   double max_joint_step{
-      0.1}; // [rad] reject servoJ targets further than this from actual q
+      0.1}; // [rad] reject targets further than this from actual q
+
+  // KUKA SmartServoPTP (ignored by other backends)
+  std::string kuka_command{"joint"}; // "joint" (72 B) | "cartesian" (64 B)
+  double kuka_speed_rel{1.0};        // joint PTP speed scale [0..1]
+  double kuka_accel_rel{1.0};        // joint PTP acceleration scale [0..1]
+  double kuka_speed_mm_s{200.0};     // cartesian LIN speed
+  double kuka_accel_mm_s2{0.0};      // cartesian LIN acceleration
+  // FK for cartesian mode. The node injects DiffIK::forwardKinematics so the
+  // driver does not build a second pinocchio model.
+  std::function<Eigen::Isometry3d(const Eigen::VectorXd &)> forward_kinematics;
 };
 
 [[nodiscard]] std::unique_ptr<RobotInterface>

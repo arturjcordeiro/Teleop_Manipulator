@@ -35,6 +35,9 @@ public:
   }
   [[nodiscard]] std::size_t dof() const noexcept override { return 6; }
 
+  [[nodiscard]] CycleToken beginCycle() override;
+  void endCycle(CycleToken t0) override;
+
   [[nodiscard]] std::string lastError() const override { return last_error_; }
 
 private:

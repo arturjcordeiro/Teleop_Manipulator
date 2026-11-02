@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <thread>
 
 #include "teleop_manipulators/core/types.hpp"
 
@@ -33,6 +34,18 @@ public:
   [[nodiscard]] virtual double period() const noexcept = 0; // [s]
   [[nodiscard]] virtual std::size_t dof() const noexcept = 0;
   [[nodiscard]] virtual std::string lastError() const { return {}; }
+
+  using CycleToken = Clock::time_point;
+
+  // Pacing hook. Backends with their own precise cycle timer override these;
+  // everything else keeps the default fixed-rate sleep.
+  virtual CycleToken beginCycle() { return Clock::now(); }
+
+  virtual void endCycle(CycleToken t0) {
+    std::this_thread::sleep_until(
+        t0 + std::chrono::duration_cast<Clock::duration>(
+                 std::chrono::duration<double>(period())));
+  }
 
 protected:
   RobotInterface() = default;

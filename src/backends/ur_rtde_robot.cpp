@@ -138,4 +138,14 @@ void UrRtdeRobot::stop() noexcept {
   }
 }
 
+UrRtdeRobot::CycleToken UrRtdeRobot::beginCycle() {
+  return ctrl_ ? ctrl_->initPeriod() : Clock::now();
+}
+
+void UrRtdeRobot::endCycle(CycleToken t0) {
+  if (ctrl_) {
+    ctrl_->waitPeriod(t0); // sleep + spin; dt = 1 / frequency_ = config_.period
+  }
+}
+
 } // namespace teleop

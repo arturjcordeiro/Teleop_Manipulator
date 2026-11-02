@@ -204,14 +204,10 @@ std::optional<StampedPose> TeleopManipulator::latestPose() const {
 }
 
 void TeleopManipulator::controlLoop() {
-  const auto period = std::chrono::duration_cast<Clock::duration>(
-      std::chrono::duration<double>(robot_->period()));
-  auto next = Clock::now();
-
   while (running_ && rclcpp::ok()) {
-    next += period;
+    const auto t0 = robot_->beginCycle();
     step();
-    std::this_thread::sleep_until(next);
+    robot_->endCycle(t0);
   }
   robot_->stop();
 }

@@ -9,8 +9,11 @@
 
     robot:
       type: kuka
-      ip: 192.168.1.20       # KUKA cabinet running SmartServoPTP.java
+      kuka_interface: udp    # udp = SmartServoPTP | fri = KUKA FRI (KONI)
+      ip: 192.168.1.20       # SmartServo cabinet running SmartServoPTP.java
       port: 30300            # SmartServo command/reply port
+      fri_ip: 192.170.10.2   # KONI address, used when kuka_interface: fri
+      fri_port: 30200        # FRI port, used when kuka_interface: fri
       mode: position         # position only; velocity is integrated by the driver
       period: 0.004          # 250 Hz, matches the 4 ms cabinet cycle
 

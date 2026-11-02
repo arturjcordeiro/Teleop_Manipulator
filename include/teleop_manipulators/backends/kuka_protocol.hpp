@@ -2,13 +2,15 @@
 //
 // Commands (mode auto-selected by packet size):
 //   72 B -> joint PTP:   [J1..J7 (rad), speed_rel (0..1), accel_rel (0..1)]
-//   64 B -> cartesian LIN:[X,Y,Z (mm), A,B,C (rad), speed (mm/s), accel (mm/s^2)]
+//   64 B -> cartesian LIN:[X,Y,Z (mm), A,B,C (rad), speed (mm/s), accel
+//   (mm/s^2)]
 //    1 B -> ping (latch the client endpoint, no motion)
 //
 // Reply (105 B, streamed at 50 Hz and after every command):
 //   [status (1 B)] + [J1..J7 (7 x BE double)] + [Fx Fy Fz] + [Tx Ty Tz]
 //
-// Everything is big-endian. Header-only so the packet layout can be unit tested.
+// Everything is big-endian. Header-only so the packet layout can be unit
+// tested.
 #pragma once
 
 #include <array>
@@ -61,8 +63,7 @@ inline double getBe(const std::uint8_t *in) {
 }
 
 inline void encodeJoint(const std::array<double, kDof> &q, double speed_rel,
-                        double accel_rel,
-                        std::uint8_t out[kJointPacketSize]) {
+                        double accel_rel, std::uint8_t out[kJointPacketSize]) {
   for (std::size_t i = 0; i < kDof; ++i) {
     putBe(out + i * 8, q[i]);
   }
@@ -74,24 +75,33 @@ inline void encodeCartesian(double x_mm, double y_mm, double z_mm, double a_rad,
                             double b_rad, double c_rad, double speed_mm_s,
                             double accel_mm_s2,
                             std::uint8_t out[kCartesianPacketSize]) {
-  const double values[8] = {x_mm,   y_mm,   z_mm,       a_rad,
-                            b_rad,  c_rad,  speed_mm_s, accel_mm_s2};
+  const double values[8] = {x_mm,  y_mm,  z_mm,       a_rad,
+                            b_rad, c_rad, speed_mm_s, accel_mm_s2};
   for (std::size_t i = 0; i < 8; ++i) {
     putBe(out + i * 8, values[i]);
   }
 }
 
-inline bool decodeReply(const std::uint8_t *buf, std::size_t len,
-                        Reply &out) {
+inline bool decodeReply(const std::uint8_t *buf, std::size_t len, Reply &out) {
   if (len != kReplySize) {
     return false;
   }
   switch (buf[0]) {
-    case 0x00: out.status = Status::Moving; break;
-    case 0x01: out.status = Status::Reached; break;
-    case 0x02: out.status = Status::Rejected; break;
-    case 0x03: out.status = Status::Idle; break;
-    default: out.status = Status::Unknown; break;
+  case 0x00:
+    out.status = Status::Moving;
+    break;
+  case 0x01:
+    out.status = Status::Reached;
+    break;
+  case 0x02:
+    out.status = Status::Rejected;
+    break;
+  case 0x03:
+    out.status = Status::Idle;
+    break;
+  default:
+    out.status = Status::Unknown;
+    break;
   }
   for (std::size_t i = 0; i < kDof; ++i) {
     out.q[i] = getBe(buf + 1 + i * 8);

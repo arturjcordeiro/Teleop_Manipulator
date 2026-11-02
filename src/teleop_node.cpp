@@ -59,6 +59,12 @@ TeleopManipulator::TeleopManipulator(const rclcpp::NodeOptions &options)
       declare_parameter<double>("robot.acceleration", 1.0);
   robot_config_.max_joint_step =
       declare_parameter<double>("robot.max_joint_step", 0.1);
+  robot_config_.kuka_interface =
+      declare_parameter<std::string>("robot.kuka_interface", "udp");
+  robot_config_.kuka_fri_ip =
+      declare_parameter<std::string>("robot.fri_ip", "192.170.10.2");
+  robot_config_.kuka_fri_port =
+      declare_parameter<int>("robot.fri_port", 30200);
   robot_config_.kuka_command =
       declare_parameter<std::string>("robot.kuka_command", "joint");
   robot_config_.kuka_speed_rel =
@@ -137,9 +143,12 @@ void TeleopManipulator::onRobotDescription(
   };
   robot_ = makeRobot(robot_config_);
   if (!robot_->connect()) {
+    const std::string &ip =
+        robot_config_.type == "kuka" && robot_config_.kuka_interface == "fri"
+            ? robot_config_.kuka_fri_ip
+            : robot_config_.ip;
     throw std::runtime_error("Could not connect to robot (" +
-                             robot_config_.type + " @ " + robot_config_.ip +
-                             ")");
+                             robot_config_.type + " @ " + ip + ")");
   }
 
   // ---- Start teleop ----

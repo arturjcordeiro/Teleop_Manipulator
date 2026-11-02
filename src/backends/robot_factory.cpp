@@ -5,6 +5,9 @@
 #include "teleop_manipulators/backends/kuka_udp_robot.hpp"
 #include "teleop_manipulators/backends/mock_robot.hpp"
 #include "teleop_manipulators/backends/ur_sim_robot.hpp"
+#ifdef TELEOP_HAS_FRI
+#include "teleop_manipulators/backends/kuka_fri_robot.hpp"
+#endif
 #ifdef TELEOP_HAS_UR
 #include "teleop_manipulators/backends/ur_rtde_robot.hpp"
 #endif
@@ -16,7 +19,20 @@ std::unique_ptr<RobotInterface> makeRobot(const RobotConfig &config) {
     return std::make_unique<MockRobot>(config);
   }
   if (config.type == "kuka") {
-    return std::make_unique<KukaUdpRobot>(config);
+    if (config.kuka_interface == "fri") {
+#ifdef TELEOP_HAS_FRI
+      return std::make_unique<KukaFriRobot>(config);
+#else
+      throw std::runtime_error("KUKA FRI backend not built (FRIClient was not "
+                               "found at build time)");
+#endif
+    }
+    if (config.kuka_interface == "udp") {
+      return std::make_unique<KukaUdpRobot>(config);
+    }
+    throw std::invalid_argument("Unknown robot.kuka_interface: " +
+                                config.kuka_interface +
+                                " (use 'udp' or 'fri')");
   }
   if (config.type == "ur_sim") {
     return std::make_unique<UrSimRobot>(config);

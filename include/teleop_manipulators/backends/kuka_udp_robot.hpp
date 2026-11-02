@@ -35,7 +35,9 @@ public:
   [[nodiscard]] double period() const noexcept override {
     return config_.period;
   }
-  [[nodiscard]] std::size_t dof() const noexcept override { return config_.dof; }
+  [[nodiscard]] std::size_t dof() const noexcept override {
+    return config_.dof;
+  }
   [[nodiscard]] std::string lastError() const override { return last_error_; }
 
 private:
@@ -46,10 +48,13 @@ private:
 
   RobotConfig config_;
   int sockfd_{-1};
-  std::uint32_t peer_ip_{0}; // network byte order
+  std::uint32_t peer_ip_{0};   // network byte order
   std::uint16_t peer_port_{0}; // network byte order
   std::array<double, kuka::kDof> q_{};
   std::array<double, kuka::kDof> dq_{};
+
+  std::array<double, kuka::kDof> q_cmd_{}; // last commanded joint target
+  bool have_cmd_ = false;
   Clock::time_point last_state_{};
   Clock::time_point last_ping_{};
   bool have_state_{false};

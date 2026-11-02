@@ -18,6 +18,7 @@ find_package(Eigen3 REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(pinocchio REQUIRED)
 find_package(ur_rtde QUIET)
+find_package(FRIClient QUIET)
 
 # -----------------------------------------------------------------------------
 # Component library: the node implementation. It can be loaded into an
@@ -63,6 +64,15 @@ if(ur_rtde_FOUND)
   target_compile_definitions(teleop_backends PRIVATE TELEOP_HAS_UR)
 else()
   message(STATUS "ur_rtde not found: UR backend disabled")
+endif()
+
+if(FRIClient_FOUND)
+  message(STATUS "FRIClient found: KUKA FRI backend enabled")
+  target_sources(teleop_backends PRIVATE src/backends/kuka_fri_robot.cpp)
+  target_link_libraries(teleop_backends PRIVATE FRIClient::FRIClient)
+  target_compile_definitions(teleop_backends PRIVATE TELEOP_HAS_FRI)
+else()
+  message(STATUS "FRIClient not found: KUKA FRI backend disabled")
 endif()
 
 add_library(teleop_manipulator_component SHARED
@@ -130,6 +140,10 @@ ament_export_dependencies(
   Eigen3
   pinocchio
 )
+
+if(FRIClient_FOUND)
+  ament_export_dependencies(FRIClient)
+endif()
 
 
 if(BUILD_TESTING)

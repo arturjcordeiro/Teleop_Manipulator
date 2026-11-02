@@ -49,6 +49,7 @@ bool UrRtdeRobot::connect() {
 void UrRtdeRobot::disconnect() noexcept {
   try {
     if (ctrl_) {
+      stop();
       ctrl_->stopScript();
       ctrl_->disconnect();
     }
@@ -119,7 +120,8 @@ bool UrRtdeRobot::write(const JointCommand &cmd) {
     return ctrl_->servoJ(toStd(cmd.value), 0.0, 0.0, config_.period,
                          config_.servo_lookahead, config_.servo_gain);
   }
-  return ctrl_->speedJ(toStd(cmd.value), config_.acceleration, config_.period);
+  return ctrl_->speedJ(toStd(cmd.value), config_.acceleration,
+                       3.0 * config_.period);
 }
 
 void UrRtdeRobot::stop() noexcept {

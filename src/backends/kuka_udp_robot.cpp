@@ -13,6 +13,10 @@
 #include <cstring>
 #include <thread>
 
+// Header additions needed in kuka_udp_robot.hpp (private members):
+//   std::array<double, kuka::kDof> q_cmd_{};  // last commanded joint target
+//   bool have_cmd_ = false;
+
 namespace teleop {
 
 namespace {
@@ -21,6 +25,22 @@ constexpr auto kStateTimeout = std::chrono::milliseconds(250);
 constexpr auto kKeepalivePeriod = std::chrono::milliseconds(50);
 constexpr auto kPingPeriod = std::chrono::milliseconds(20);
 constexpr auto kDiscoveryTimeout = std::chrono::seconds(1);
+constexpr int kMaxDrainPerCall = 256;
+
+// SmartServoPTP streams telemetry to <client ip>:STATE_PORT (30301) and answers
+// pings on the sender's port. Binding our socket to 30301 makes both arrive
+// here.
+constexpr std::uint16_t kLocalStatePort = 30301;
+
+// KUKA A,B,C: R = Rz(A) * Ry(B) * Rx(C), with B in [-pi/2, pi/2].
+// Eigen's eulerAngles(2,1,0) returns A in [0, pi] instead and can jump to the
+// equivalent set (A+pi, pi-B, C+pi), which the robot sees as a huge B change.
+Eigen::Vector3d kukaAbc(const Eigen::Matrix3d &R) {
+  const double b = std::asin(std::clamp(-R(2, 0), -1.0, 1.0));
+  const double a = std::atan2(R(1, 0), R(0, 0));
+  const double c = std::atan2(R(2, 1), R(2, 2));
+  return {a, b, c};
+}
 
 } // namespace
 
@@ -61,8 +81,22 @@ bool KukaUdpRobot::connect() {
     return false;
   }
 
-  int rcvbuf = 1 << 20;
-  ::setsockopt(sockfd_, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+  int reuse = 1;
+  ::setsockopt(sockfd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+  // Bind to the robot's telemetry destination port (see kLocalStatePort).
+  sockaddr_in local{};
+  local.sin_family = AF_INET;
+  local.sin_addr.s_addr = htonl(INADDR_ANY);
+  local.sin_port = htons(kLocalStatePort);
+  if (::bind(sockfd_, reinterpret_cast<const sockaddr *>(&local),
+             sizeof(local)) < 0) {
+    last_error_ = "bind to UDP " + std::to_string(kLocalStatePort) +
+                  " failed: " + std::strerror(errno) +
+                  " (another client running?)";
+    disconnect();
+    return false;
+  }
 
   sockaddr_in peer{};
   peer.sin_family = AF_INET;
@@ -75,9 +109,8 @@ bool KukaUdpRobot::connect() {
   peer_ip_ = peer.sin_addr.s_addr;
   peer_port_ = peer.sin_port;
 
-  // Discovery: the Java app latches our address from the first packet and then
-  // starts streaming state. Wait for the first reply so we never start the
-  // control loop blind.
+  // Discovery: the Java app latches our address from any packet and then
+  // streams state. Wait for the first reply so we never start the loop blind.
   sendPing();
   const auto deadline = Clock::now() + kDiscoveryTimeout;
   while (!have_state_ && Clock::now() < deadline) {
@@ -88,8 +121,7 @@ bool KukaUdpRobot::connect() {
   }
   if (!have_state_) {
     last_error_ = "no reply from " + config_.ip + ":" +
-                  std::to_string(config_.port) +
-                  " (is SmartServoPTP running?)";
+                  std::to_string(config_.port) + " (is SmartServoPTP running?)";
     disconnect();
     return false;
   }
@@ -104,6 +136,7 @@ void KukaUdpRobot::disconnect() noexcept {
     sockfd_ = -1;
   }
   have_state_ = false;
+  have_cmd_ = false;
   q_.fill(0.0);
   dq_.fill(0.0);
 }
@@ -115,40 +148,44 @@ void KukaUdpRobot::drainReplies() {
   }
   std::uint8_t buf[kuka::kReplySize];
   kuka::Reply reply;
+  kuka::Reply newest;
+  bool got = false;
 
-  // Newest packet wins: a queued reply must never be older than the cached one.
-  for (int i = 0; i < 32; ++i) {
+  // Read everything queued; only the newest reply updates the cached state.
+  for (int i = 0; i < kMaxDrainPerCall; ++i) {
     const ssize_t n = ::recv(sockfd_, buf, sizeof(buf), 0);
     if (n < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-        return;
+      if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+        last_error_ = std::string("recv failed: ") + std::strerror(errno);
       }
-      last_error_ = std::string("recv failed: ") + std::strerror(errno);
-      return;
+      break;
     }
-    if (!kuka::decodeReply(buf, static_cast<std::size_t>(n), reply)) {
-      continue;
+    if (kuka::decodeReply(buf, static_cast<std::size_t>(n), reply)) {
+      newest = reply;
+      got = true;
     }
-
-    const auto now = Clock::now();
-    if (have_state_) {
-      const double dt =
-          std::chrono::duration<double>(now - last_state_).count();
-      if (dt > 1e-4) {
-        for (std::size_t j = 0; j < kuka::kDof; ++j) {
-          dq_[j] = (reply.q[j] - q_[j]) / dt;
-        }
-      } else {
-        dq_.fill(0.0);
-      }
-    } else {
-      dq_.fill(0.0);
-    }
-
-    q_ = reply.q;
-    last_state_ = now;
-    have_state_ = true;
   }
+  if (!got) {
+    return;
+  }
+
+  // Velocity from the newest sample vs. the previously cached one (not between
+  // packets of the same burst, which arrive microseconds apart).
+  const auto now = Clock::now();
+  if (have_state_) {
+    const double dt = std::chrono::duration<double>(now - last_state_).count();
+    if (dt > 1e-3) {
+      for (std::size_t j = 0; j < kuka::kDof; ++j) {
+        dq_[j] = (newest.q[j] - q_[j]) / dt;
+      }
+    }
+  } else {
+    dq_.fill(0.0);
+  }
+
+  q_ = newest.q;
+  last_state_ = now;
+  have_state_ = true;
 }
 
 std::optional<JointState> KukaUdpRobot::read() {
@@ -164,12 +201,12 @@ std::optional<JointState> KukaUdpRobot::read() {
   const auto now = Clock::now();
   const auto age = now - last_state_;
   if (age > kKeepalivePeriod && now - last_ping_ > kPingPeriod) {
-    // Idle keepalive: refresh state without changing the motion target.
+    // Fallback only: telemetry normally streams at 120 Hz on its own.
     sendPing();
   }
   if (age > kStateTimeout) {
-    last_error_ = "no KUKA state for > " +
-                  std::to_string(kStateTimeout.count()) + " ms";
+    last_error_ =
+        "no KUKA state for > " + std::to_string(kStateTimeout.count()) + " ms";
     return std::nullopt;
   }
 
@@ -195,6 +232,10 @@ bool KukaUdpRobot::write(const JointCommand &cmd) {
     last_error_ = "cannot command without measured state";
     return false;
   }
+  if (!have_cmd_) {
+    q_cmd_ = q_; // seed the command from the measured position
+    have_cmd_ = true;
+  }
 
   std::array<double, kuka::kDof> target{};
   if (cmd.mode == CommandMode::Position) {
@@ -202,10 +243,15 @@ bool KukaUdpRobot::write(const JointCommand &cmd) {
       target[j] = cmd.value[static_cast<Eigen::Index>(j)];
     }
   } else {
-    // The SmartServo app only takes positions; integrate velocity here.
+    // Integrate from the last COMMANDED target, not the measured position:
+    // integrating from q_ makes every target trail the robot and the arm
+    // creeps. The lead over the measured position is bounded so a robot that
+    // can't keep up doesn't make the integrator run away.
+    const double max_lead = 0.5 * config_.max_joint_step;
     for (std::size_t j = 0; j < kuka::kDof; ++j) {
-      target[j] =
-          q_[j] + cmd.value[static_cast<Eigen::Index>(j)] * config_.period;
+      const double t =
+          q_cmd_[j] + cmd.value[static_cast<Eigen::Index>(j)] * config_.period;
+      target[j] = std::clamp(t, q_[j] - max_lead, q_[j] + max_lead);
     }
   }
 
@@ -215,34 +261,39 @@ bool KukaUdpRobot::write(const JointCommand &cmd) {
     jump = std::max(jump, std::abs(target[j] - q_[j]));
   }
   if (jump > config_.max_joint_step) {
-    last_error_ = "rejected target: " + std::to_string(jump) +
-                  " rad from actual";
+    last_error_ =
+        "rejected target: " + std::to_string(jump) + " rad from actual";
     stop();
     return false;
   }
 
-  return sendTarget(target, config_.kuka_command == "cartesian");
+  if (!sendTarget(target, config_.kuka_command == "cartesian")) {
+    return false;
+  }
+  q_cmd_ = target;
+  return true;
 }
 
 bool KukaUdpRobot::sendTarget(const std::array<double, kuka::kDof> &q,
                               bool cartesian) {
   if (cartesian) {
     if (!config_.forward_kinematics) {
-      last_error_ = "cartesian mode needs forward_kinematics (robot_description)";
+      last_error_ =
+          "cartesian mode needs forward_kinematics (robot_description)";
       return false;
     }
+    // FK must give the FLANGE pose in the robot BASE frame, in meters
+    // (SmartServoPTP moves the flange frame).
     const Eigen::VectorXd qv = Eigen::Map<const Eigen::VectorXd>(
         q.data(), static_cast<Eigen::Index>(kuka::kDof));
     const Eigen::Isometry3d pose = config_.forward_kinematics(qv);
-    // KUKA A,B,C = rotations about Z,Y,X (radians).
-    const Eigen::Vector3d abc = pose.linear().eulerAngles(2, 1, 0);
+    const Eigen::Vector3d abc = kukaAbc(pose.linear());
 
     std::uint8_t buf[kuka::kCartesianPacketSize];
-    kuka::encodeCartesian(pose.translation().x() * 1000.0,
-                          pose.translation().y() * 1000.0,
-                          pose.translation().z() * 1000.0, abc[0], abc[1],
-                          abc[2], config_.kuka_speed_mm_s,
-                          config_.kuka_accel_mm_s2, buf);
+    kuka::encodeCartesian(
+        pose.translation().x() * 1000.0, pose.translation().y() * 1000.0,
+        pose.translation().z() * 1000.0, abc[0], abc[1], abc[2],
+        config_.kuka_speed_mm_s, config_.kuka_accel_mm_s2, buf);
     return sendPacket(buf, sizeof(buf));
   }
 
@@ -253,12 +304,17 @@ bool KukaUdpRobot::sendTarget(const std::array<double, kuka::kDof> &q,
 
 void KukaUdpRobot::stop() noexcept {
   try {
-    // Hold the measured joints with a joint packet; size selects PTP mode in
-    // the Java app, so this also stops a cartesian stream.
+    have_cmd_ = false; // next command re-seeds from the measured position
     if (sockfd_ < 0 || !have_state_) {
       return;
     }
-    sendTarget(q_, false);
+    // Hold the measured position in the SAME mode that is streaming. A joint
+    // packet during a cartesian stream would make the Java app switch
+    // LIN -> PTP (servo stop + restart), and back again on the next command.
+    const bool cartesian = config_.kuka_command == "cartesian";
+    if (!sendTarget(q_, cartesian) && cartesian) {
+      sendTarget(q_, false); // no FK available: fall back to a joint hold
+    }
   } catch (...) {
   }
 }
@@ -273,9 +329,9 @@ bool KukaUdpRobot::sendPacket(const std::uint8_t *data, std::size_t len) {
   dst.sin_port = peer_port_;
   dst.sin_addr.s_addr = peer_ip_;
 
-  const ssize_t n = ::sendto(sockfd_, data, len, 0,
-                             reinterpret_cast<const sockaddr *>(&dst),
-                             sizeof(dst));
+  const ssize_t n =
+      ::sendto(sockfd_, data, len, 0, reinterpret_cast<const sockaddr *>(&dst),
+               sizeof(dst));
   if (n != static_cast<ssize_t>(len)) {
     last_error_ = std::string("sendto failed: ") + std::strerror(errno);
     return false;

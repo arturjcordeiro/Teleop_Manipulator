@@ -1,0 +1,11 @@
+# FRI client SDK branch MUST match the controller's FRI version.
+# One of: fri-1.11, fri-1.13, fri-1.14, fri-1.15, fri-1.16, fri-2.5, fri-2.6, fri-2.7
+repositories:
+  fri:
+    type: git
+    url: https://github.com/lbr-stack/fri
+    version: fri-1.15
+  # fri:
+  #   type: git
+  #   url: https://github.com/lbr-stack/fri
+  #   version: fri-2.5

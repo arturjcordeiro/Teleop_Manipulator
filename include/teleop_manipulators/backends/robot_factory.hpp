@@ -27,6 +27,11 @@ struct RobotConfig {
   double max_joint_step{
       0.1}; // [rad] reject targets further than this from actual q
 
+  // KUKA interface selector and FRI address (ignored by other backends)
+  std::string kuka_interface{"udp"}; // "udp" (SmartServoPTP) | "fri"
+  std::string kuka_fri_ip{"192.170.10.2"};
+  int kuka_fri_port{30200};
+
   // KUKA SmartServoPTP (ignored by other backends)
   std::string kuka_command{"joint"}; // "joint" (72 B) | "cartesian" (64 B)
   double kuka_speed_rel{1.0};        // joint PTP speed scale [0..1]

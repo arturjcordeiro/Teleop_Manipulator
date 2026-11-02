@@ -12,7 +12,7 @@ limits, and streams joint commands to a robot backend. Supported backends:
 | Mock | `mock` | Integrates commands; no hardware, no ROS controller |
 | UR simulation | `ur_sim` | Uses `ros2_control` `forward_position_controller` / `forward_velocity_controller` |
 | Universal Robots | `ur` | Real robot through `ur_rtde`; built only if `ur_rtde` is found |
-| KUKA iiwa 14 | `kuka` | UDP SmartServoPTP to a cabinet running `SmartServoPTP.java` |
+| KUKA iiwa 14 | `kuka` | `robot.kuka_interface: udp` (SmartServoPTP) or `fri` (KUKA FRI) |
 
 ## How it works
 
@@ -38,9 +38,11 @@ OptiTrack tool pose ──> PoseMapper ──> DiffIK ──> Safety ──> rob
 - ROS 2 (tested on Jazzy)
 - Eigen3
 - Pinocchio
+- KUKA FRI client SDK (`fri_client_sdk`, imported via `fri.repos`)
 - `ur_rtde` (optional, for real UR robots)
 - For UR simulation: `ur_robot_driver` and `ur_description`
-- For KUKA: a cabinet running the companion `SmartServoPTP.java` program
+- For KUKA: a cabinet running `SmartServoPTP.java` (UDP) or FRI with a matching
+  FRI client version (see `fri.repos`)
 
 ```bash
 # Pinocchio
@@ -56,10 +58,15 @@ sudo apt install librtde librtde-dev
 
 ```bash
 cd ~/dev_ws
+vcs import src < src/Teleop_Manipulator/fri.repos
 rosdep install --from-paths src --ignore-src -r -y
-colcon build --packages-select teleop_manipulators
+colcon build --packages-up-to teleop_manipulators
 source install/setup.bash
 ```
+
+`fri.repos` pins FRI 1.15. Set its `version` to the branch matching your
+controller before importing (`fri-1.11`, `fri-1.13`, `fri-1.14`, `fri-1.15`,
+`fri-1.16`, `fri-2.5`, `fri-2.6`, `fri-2.7`). A mismatch fails the FRI build.
 
 ## Run
 
@@ -122,7 +129,9 @@ All parameters live in `config/*.yaml` under `/**/ros__parameters`.
 | `tcp_frame` | URDF frame used as the controlled TCP, e.g. `tool0` |
 | `base_frame` | Manipulator base frame; empty keeps the full chain to the TCP and locks side branches |
 | `robot.type` | `mock`, `ur_sim`, `ur`, or `kuka` |
-| `robot.ip`, `robot.port` | Robot address (UDP port for KUKA) |
+| `robot.ip`, `robot.port` | Robot address (SmartServo UDP address for KUKA) |
+| `robot.kuka_interface` | `udp` (SmartServoPTP) or `fri` (KUKA FRI) |
+| `robot.fri_ip`, `robot.fri_port` | KONI address when `robot.kuka_interface: fri` |
 | `robot.period` | Control period in seconds, e.g. `0.002` for 500 Hz |
 | `robot.mode` | `position` or `velocity` |
 | `robot.max_joint_step` | Reject position targets further than this from actual q [rad] |
@@ -138,7 +147,8 @@ If `safety.max_joint_velocity` does not match the URDF joint count, the URDF
 velocity limits are used and a warning is logged.
 
 UR-specific: `robot.servo_lookahead`, `robot.servo_gain`, `robot.acceleration`.
-KUKA-specific: `robot.kuka_command` (`joint` or `cartesian`),
+KUKA-specific: `robot.kuka_interface`, `robot.fri_ip`, `robot.fri_port`,
+`robot.kuka_command` (`joint` or `cartesian`),
 `robot.kuka_speed_rel`, `robot.kuka_accel_rel`, `robot.kuka_speed_mm_s`,
 `robot.kuka_accel_mm_s2`.
 

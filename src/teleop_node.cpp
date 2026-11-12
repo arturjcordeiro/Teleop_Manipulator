@@ -1,4 +1,6 @@
 #include "teleop_manipulators/teleop_node.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
+#include <fcntl.h>
 
 namespace teleop {
 
@@ -63,8 +65,7 @@ TeleopManipulator::TeleopManipulator(const rclcpp::NodeOptions &options)
       declare_parameter<std::string>("robot.kuka_interface", "udp");
   robot_config_.kuka_fri_ip =
       declare_parameter<std::string>("robot.fri_ip", "192.170.10.2");
-  robot_config_.kuka_fri_port =
-      declare_parameter<int>("robot.fri_port", 30200);
+  robot_config_.kuka_fri_port = declare_parameter<int>("robot.fri_port", 30200);
   robot_config_.kuka_command =
       declare_parameter<std::string>("robot.kuka_command", "joint");
   robot_config_.kuka_speed_rel =
@@ -75,6 +76,14 @@ TeleopManipulator::TeleopManipulator(const rclcpp::NodeOptions &options)
       declare_parameter<double>("robot.kuka_speed_mm_s", 200.0);
   robot_config_.kuka_accel_mm_s2 =
       declare_parameter<double>("robot.kuka_accel_mm_s2", 0.0);
+  publish_joint_states_ =
+      declare_parameter<bool>("publish_joint_states", false);
+  joint_state_rate_ =
+      declare_parameter<double>("joint_state_publish_rate", 50.0);
+  if (publish_joint_states_) {
+    joint_state_pub_ = create_publisher<sensor_msgs::msg::JointState>(
+        "/joint_states", rclcpp::QoS(10));
+  }
 
   pose_topic_ =
       declare_parameter<std::string>("pose_topic", "/optitrack/tool/pose");
@@ -117,6 +126,10 @@ void TeleopManipulator::onRobotDescription(
   // ---- IK from the published URDF ----
   ik_params_.urdf_xml = msg->data;
   ik_ = std::make_unique<DiffIK>(ik_params_);
+
+  if (publish_joint_states_) {
+    joint_names_ = ik_->jointNames();
+  }
 
   // ---- Safety (joint limits from the URDF) ----
   safety_params_.lower_limits = ik_->lowerLimits();
@@ -220,6 +233,7 @@ void TeleopManipulator::step() {
     disengage();
     return;
   }
+  publishJointState(*state);
 
   // request latest pose from Optitrack/tool topic
   const auto pose = latestPose();
@@ -253,11 +267,19 @@ void TeleopManipulator::step() {
     safety_->clampVelocity(dq);
     q_cmd_ += dq * robot_->period();
     safety_->clampPosition(q_cmd_);
-    robot_->write({CommandMode::Position, q_cmd_});
+    if (!robot_->write({CommandMode::Position, q_cmd_})) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                           "Robot write failed: %s",
+                           robot_->lastError().c_str());
+    }
   } else {
     Eigen::VectorXd dq = ik_->solve(state->q, *target);
     safety_->clampVelocity(dq);
-    robot_->write({CommandMode::Velocity, dq});
+    if (!robot_->write({CommandMode::Velocity, dq})) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                           "Robot write failed: %s",
+                           robot_->lastError().c_str());
+    }
   }
 }
 
@@ -267,6 +289,33 @@ void TeleopManipulator::disengage() {
     robot_->stop();
     engaged_ = false;
   }
+}
+
+void TeleopManipulator::publishJointState(const JointState &state) {
+  if (!joint_state_pub_ ||
+      joint_names_.size() != static_cast<std::size_t>(state.q.size())) {
+    return;
+  }
+
+  const auto now = Clock::now();
+  const auto min_period =
+      joint_state_rate_ > 0.0
+          ? std::chrono::duration_cast<Clock::duration>(
+                std::chrono::duration<double>(1.0 / joint_state_rate_))
+          : Clock::duration::zero();
+
+  if (now - last_joint_pub_ < min_period) {
+    // Did not pass period of refresh rate
+    return;
+  }
+  last_joint_pub_ = now;
+
+  sensor_msgs::msg::JointState msg;
+  msg.header.stamp = this->now();
+  msg.name = joint_names_;
+  msg.position.assign(state.q.data(), state.q.data() + state.q.size());
+  msg.velocity.assign(state.dq.data(), state.dq.data() + state.dq.size());
+  joint_state_pub_->publish(msg);
 }
 
 } // namespace teleop

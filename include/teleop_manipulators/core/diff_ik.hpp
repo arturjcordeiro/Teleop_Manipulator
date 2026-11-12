@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "teleop_manipulators/core/types.hpp"
 
@@ -44,6 +45,7 @@ public:
   [[nodiscard]] Eigen::VectorXd lowerLimits() const;
   [[nodiscard]] Eigen::VectorXd upperLimits() const;
   [[nodiscard]] Eigen::VectorXd velocityLimits() const;
+  [[nodiscard]] std::vector<std::string> jointNames() const;
 
 private:
   struct Impl;

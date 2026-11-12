@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <rclcpp/publisher.hpp>
 #include <string>
 #include <thread>
 
@@ -14,6 +15,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_srvs/srv/set_bool.hpp"
 
@@ -21,6 +23,7 @@
 #include "teleop_manipulators/core/diff_ik.hpp"
 #include "teleop_manipulators/core/pose_mapper.hpp"
 #include "teleop_manipulators/core/safety.hpp"
+#include <chrono>
 
 namespace teleop {
 
@@ -55,6 +58,7 @@ private:
   void controlLoop();
   void step();
   void disengage();
+  void publishJointState(const JointState &state);
 
   // Owned by the control thread only
   Eigen::VectorXd q_cmd_;
@@ -64,6 +68,10 @@ private:
   Safety::Params safety_params_;
   RobotConfig robot_config_;
   std::string pose_topic_;
+  bool publish_joint_states_{false};
+  double joint_state_rate_{50.0};
+  std::vector<std::string> joint_names_;
+  Clock::time_point last_joint_pub_{};
 
   // Core + backend (created in onRobotDescription)
   std::unique_ptr<DiffIK> ik_;
@@ -74,8 +82,11 @@ private:
   // ROS interfaces
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr description_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr
+      smart_servo_joint_pub_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr clutch_srv_;
   std::thread control_thread_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
 
   mutable std::mutex pose_mutex_;
   std::optional<StampedPose> latest_pose_;

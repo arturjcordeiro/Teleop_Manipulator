@@ -126,6 +126,8 @@ All parameters live in `config/*.yaml` under `/**/ros__parameters`.
 | --- | --- |
 | `pose_topic` | OptiTrack tool pose topic (`geometry_msgs/PoseStamped`) |
 | `robot_description_topic` | URDF topic (`std_msgs/String`, transient-local) |
+| `publish_joint_states` | Publish measured joints on `/joint_states` (default `false`). Enable it for backends without a ROS driver (KUKA, mock); leave it off for UR where the driver already publishes |
+| `joint_state_publish_rate` | Maximum `/joint_states` rate in Hz (default `50`); `0` publishes every control cycle |
 | `tcp_frame` | URDF frame used as the controlled TCP, e.g. `tool0` |
 | `base_frame` | Manipulator base frame; empty keeps the full chain to the TCP and locks side branches |
 | `robot.type` | `mock`, `ur_sim`, `ur`, or `kuka` |
@@ -134,7 +136,7 @@ All parameters live in `config/*.yaml` under `/**/ros__parameters`.
 | `robot.fri_ip`, `robot.fri_port` | KONI address when `robot.kuka_interface: fri` |
 | `robot.period` | Control period in seconds, e.g. `0.002` for 500 Hz |
 | `robot.mode` | `position` or `velocity` |
-| `robot.max_joint_step` | Reject position targets further than this from actual q [rad] |
+| `robot.max_joint_step` | Reject position targets further than this from actual q [rad]. Raise for PTP tracking lag; too high weakens the discontinuity guard |
 | `ik.damping` | DLS damping; higher is safer near singularities |
 | `ik.gain_linear`, `ik.gain_angular` | P-gains on pose error [1/s] |
 | `mapping.R_base_optitrack` | 9 row-major values: OptiTrack -> robot base |
@@ -151,6 +153,13 @@ KUKA-specific: `robot.kuka_interface`, `robot.fri_ip`, `robot.fri_port`,
 `robot.kuka_command` (`joint` or `cartesian`),
 `robot.kuka_speed_rel`, `robot.kuka_accel_rel`, `robot.kuka_speed_mm_s`,
 `robot.kuka_accel_mm_s2`.
+
+For KUKA there is no ROS driver, so `config/kuka.yaml` sets
+`publish_joint_states: true`: the teleop node republishes the state it already
+reads from the UDP/FRI backend on `/joint_states`. Run
+`robot_state_publisher` with the KUKA URDF as well, otherwise there is no TF
+for RViz. Do not enable this for UR — `ur_robot_driver` already publishes
+`/joint_states`.
 
 ## Examples
 

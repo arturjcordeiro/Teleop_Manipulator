@@ -71,6 +71,22 @@ TEST(DiffIK, BaseFrameDropsMobileBaseJoints) {
   EXPECT_EQ(ik.velocityLimits().size(), 2);
 }
 
+TEST(DiffIK, JointNamesMatchDofAndOrder) {
+  DiffIK ik(makeParams(""));
+  const auto names = ik.jointNames();
+  ASSERT_EQ(names.size(), ik.dof());
+  EXPECT_EQ(names[0], "lift");
+  EXPECT_EQ(names[1], "shoulder");
+  EXPECT_EQ(names[2], "elbow");
+
+  // Joints pruned by base_frame must not appear in the published names.
+  DiffIK base_ik(makeParams("lift_link"));
+  const auto base_names = base_ik.jointNames();
+  ASSERT_EQ(base_names.size(), base_ik.dof());
+  EXPECT_EQ(base_names[0], "shoulder");
+  EXPECT_EQ(base_names[1], "elbow");
+}
+
 TEST(DiffIK, UnknownBaseFrameThrows) {
   EXPECT_THROW(DiffIK(makeParams("nope")), std::invalid_argument);
 }

@@ -28,7 +28,7 @@
       kuka_speed_mm_s: 800.0 # cartesian-only
       kuka_accel_mm_s2: 0.0 # cartesian-only, 0 = cabinet default
 
-      max_joint_step: 0.1 # [rad] reject targets further than this from q
+      max_joint_step: 0.1 # [rad] max target lead over measured q (clamped)
 
     ik:
       damping: 0.05

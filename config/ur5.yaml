@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
-    pose_topic: /optitrack/tool/pose
-    robot_description_topic: /robot_description   # e.g. /ur5/robot_description if namespaced
+    pose_topic: /probe/pose
+    robot_description_topic: /robot_description # e.g. /ur5/robot_description if namespaced
     tcp_frame: tool0
     # Manipulator base link. Empty = keep the whole URDF chain to the TCP
     # and only lock side branches (e.g. wheels on a mobile base).
@@ -9,23 +9,24 @@
 
     robot:
       type: ur
-      ip: 192.168.1.10
-      mode: position        # servoJ (like GELLO). "velocity" -> speedJ
-      period: 0.002         # e-Series 500 Hz. CB3: 0.008 (125 Hz)
-      servo_lookahead: 0.1
-      servo_gain: 300.0
+      ip: 192.168.0.20
+      mode: position # servoJ (like GELLO). "velocity" -> speedJ
+      period: 0.008 # e-Series 500 Hz. CB3: 0.008 (125 Hz)
+      servo_lookahead: 0.2
+      max_joint_step: 1.0
+      servo_gain: 100.0
       acceleration: 1.0
 
     ik:
       damping: 0.05
-      gain_linear: 2.0
-      gain_angular: 2.0
+      gain_linear: 10.0
+      gain_angular: 10.0
 
     mapping:
       R_base_optitrack: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
       translation_scale: 1.0
 
     safety:
-      max_joint_velocity: [0.5, 0.5, 0.5, 0.8, 0.8, 0.8]
+      max_joint_velocity: [3.14, 3.14, 3.14, 3.2, 3.2, 3.2]
       limit_margin: 0.05
       pose_timeout_ms: 50

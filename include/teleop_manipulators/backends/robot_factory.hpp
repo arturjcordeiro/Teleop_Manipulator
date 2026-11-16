@@ -25,7 +25,7 @@ struct RobotConfig {
   //
   int rt_priority{80}; // ur_rtde thread priority (needs rtprio permission)
   double max_joint_step{
-      0.1}; // [rad] reject targets further than this from actual q
+      0.1}; // [rad] max target lead over measured q (clamped, not rejected)
 
   // KUKA interface selector and FRI address (ignored by other backends)
   std::string kuka_interface{"udp"}; // "udp" (SmartServoPTP) | "fri"

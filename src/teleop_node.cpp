@@ -261,12 +261,20 @@ void TeleopManipulator::step() {
   }
 
   if (robot_->commandMode() == CommandMode::Position) {
-    // Solve from the commanded q (not measured) for a smooth integrated
-    // trajectory.
+    // Integrate from the commanded q for a smooth trajectory, but bound how
+    // far the command may lead the measured joints. Unbounded integration
+    // winds up while the arm cannot keep up: servoJ then brakes, and a target
+    // >max_joint_step away makes the backend reject it and stop. The bound
+    // keeps the target reachable so fast motion continues instead of
+    // aborting. (Same rule as the KUKA backends.)
     Eigen::VectorXd dq = ik_->solve(q_cmd_, *target);
     safety_->clampVelocity(dq);
     q_cmd_ += dq * robot_->period();
     safety_->clampPosition(q_cmd_);
+    const double max_lead = 0.5 * robot_config_.max_joint_step;
+    const Eigen::VectorXd lo = state->q.array() - max_lead;
+    const Eigen::VectorXd hi = state->q.array() + max_lead;
+    q_cmd_ = q_cmd_.cwiseMax(lo).cwiseMin(hi);
     if (!robot_->write({CommandMode::Position, q_cmd_})) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
                            "Robot write failed: %s",

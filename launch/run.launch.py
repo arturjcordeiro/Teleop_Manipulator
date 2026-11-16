@@ -28,7 +28,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument(
-                "robot", default_value="ur_sim", description="Config file in config/"
+                "robot", default_value="ur5", description="Config file in config/"
             ),
             OpaqueFunction(function=launch_setup),
         ]

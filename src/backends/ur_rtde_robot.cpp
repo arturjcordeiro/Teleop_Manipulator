@@ -106,18 +106,19 @@ bool UrRtdeRobot::write(const JointCommand &cmd) {
   }
 
   if (cmd.mode == CommandMode::Position) {
-    // Last line of defence: a target far from the actual joints means a bug or
-    // a bad pose upstream. servoJ would try to get there fast, so refuse.
+    // Bound the lead over the measured joints. Rejecting a far target with
+    // servoStop() braked the robot during fast teleop, where the servoJ target
+    // legitimately leads the lagging arm. Scaling the whole vector keeps the
+    // motion direction and lets it continue; the lead stays hard-bounded.
     const Eigen::VectorXd q = toEigen(recv_->getActualQ());
-    const double jump = (cmd.value - q).cwiseAbs().maxCoeff();
+    Eigen::VectorXd target = cmd.value;
+    const Eigen::VectorXd lead = target - q;
+    const double jump = lead.cwiseAbs().maxCoeff();
     if (jump > config_.max_joint_step) {
-      last_error_ = "rejected servoJ target: " + std::to_string(jump) +
-                    " rad from actual";
-      stop();
-      return false;
+      target = q + lead * (config_.max_joint_step / jump);
     }
     // servoJ ignores speed/acceleration; time = one control period.
-    return ctrl_->servoJ(toStd(cmd.value), 0.0, 0.0, config_.period,
+    return ctrl_->servoJ(toStd(target), 0.0, 0.0, config_.period,
                          config_.servo_lookahead, config_.servo_gain);
   }
   return ctrl_->speedJ(toStd(cmd.value), config_.acceleration,

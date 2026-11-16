@@ -154,20 +154,20 @@ bool UrSimRobot::write(const JointCommand &cmd) {
   }
 
   if (cmd.mode == CommandMode::Position) {
-    // Same safety check as the real backend, so sim catches the same bugs.
+    // Same rule as the real backend: clamp the lead so a target that is ahead
+    // of the lagging arm keeps moving instead of being rejected.
     Eigen::VectorXd q;
     {
       std::lock_guard<std::mutex> lk(mtx_);
       q = q_;
     }
-    const double jump = (cmd.value - q).cwiseAbs().maxCoeff();
+    Eigen::VectorXd target = cmd.value;
+    const Eigen::VectorXd lead = target - q;
+    const double jump = lead.cwiseAbs().maxCoeff();
     if (jump > config_.max_joint_step) {
-      last_error_ = "rejected position target: " + std::to_string(jump) +
-                    " rad from actual";
-      stop();
-      return false;
+      target = q + lead * (config_.max_joint_step / jump);
     }
-    publish(cmd.value);
+    publish(target);
     return true;
   }
 

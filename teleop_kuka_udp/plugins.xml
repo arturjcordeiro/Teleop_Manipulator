@@ -1,0 +1,8 @@
+<library path="teleop_kuka_udp">
+  <class
+    name="kuka"
+    type="teleop::KukaUdpRobot"
+    base_class_type="teleop::ManipulatorInterface">
+    <description>KUKA iiwa via SmartServoPTP (UDP).</description>
+  </class>
+</library>

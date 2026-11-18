@@ -1,0 +1,8 @@
+<library path="teleop_mock">
+  <class
+    name="mock"
+    type="teleop::MockRobot"
+    base_class_type="teleop::ManipulatorInterface">
+    <description>Integrates commands; no hardware.</description>
+  </class>
+</library>

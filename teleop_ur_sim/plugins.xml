@@ -1,0 +1,8 @@
+<library path="teleop_ur_sim">
+  <class
+    name="ur_sim"
+    type="teleop::UrSimRobot"
+    base_class_type="teleop::ManipulatorInterface">
+    <description>UR simulation via ros2_control forward controllers.</description>
+  </class>
+</library>

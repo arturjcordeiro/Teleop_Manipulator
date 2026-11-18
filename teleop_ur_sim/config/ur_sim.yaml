@@ -1,0 +1,29 @@
+/**:
+  ros__parameters:
+    pose_topic: /probe/pose
+    robot_description_topic: /robot_description # e.g. /ur5/robot_description if namespaced
+    tcp_frame: tool0
+    # Manipulator base link. Empty = keep the whole URDF chain to the TCP
+    # and only lock side branches (e.g. wheels on a mobile base).
+    base_frame: ""
+
+    robot:
+      type: ur_sim
+      mode: position #  "velocity" -> speedJ
+      period: 0.002 #0.008333333 #0.002 # e-Series 500 Hz. CB3: 0.008 (125 Hz)
+      acceleration: 4.0
+
+    ik:
+      damping: 0.03 #0.05
+      gain_linear: 5.0 #2.0
+      gain_angular: 5.0 #2.0
+
+    mapping:
+      R_base_optitrack: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+      translation_scale: 1.0
+
+    safety:
+      # max_joint_velocity: [0.3, 0.3, 0.4, 0.6, 0.6, 0.6] # UR10 is heavier: start slower
+      max_joint_velocity: [2.0, 2.0, 2.0, 2.5, 2.5, 2.5] # UR10 is heavier: start slower
+      limit_margin: 0.05 #0.05
+      pose_timeout_ms: 50

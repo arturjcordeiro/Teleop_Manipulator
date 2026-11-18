@@ -1,0 +1,8 @@
+<library path="teleop_kuka_fri">
+  <class
+    name="kuka_fri"
+    type="teleop::KukaFriRobot"
+    base_class_type="teleop::ManipulatorInterface">
+    <description>KUKA iiwa via FRI (KONI).</description>
+  </class>
+</library>

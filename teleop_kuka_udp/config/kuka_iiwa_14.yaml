@@ -1,0 +1,42 @@
+/**:
+  ros__parameters:
+    pose_topic: /optitrack/tool/pose
+    robot_description_topic: /robot_description
+    # No ROS driver publishes joint states for the KUKA, so the teleop node
+    # republishes the measured state from its backend.
+    publish_joint_states: true
+    tcp_frame: tool0
+    # Manipulator base link. Empty = keep the whole URDF chain to the TCP
+    # and only lock side branches (e.g. wheels on a mobile base).
+    base_frame: ""
+
+    robot:
+      type: kuka
+      ip: 192.168.1.20 # SmartServo cabinet running SmartServoPTP.java
+      port: 30300 # SmartServo command/reply port
+      mode: position # position only; velocity is integrated by the driver
+      period: 0.004 # 250 Hz, matches the 4 ms cabinet cycle
+
+      # "joint"     -> 72-byte joint PTP, lowest overhead for joint-space IK
+      # "cartesian" -> 64-byte LIN, FK of the commanded joints
+      kuka_command: joint
+      kuka_speed_rel: 1.0 # joint PTP speed scale [0..1]
+      kuka_accel_rel: 1.0 # joint PTP acceleration scale [0..1]
+      kuka_speed_mm_s: 800.0 # cartesian-only
+      kuka_accel_mm_s2: 0.0 # cartesian-only, 0 = cabinet default
+
+      max_joint_step: 0.1 # [rad] max target lead over measured q (clamped)
+
+    ik:
+      damping: 0.05
+      gain_linear: 2.0
+      gain_angular: 2.0
+
+    mapping:
+      R_base_optitrack: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+      translation_scale: 1.0
+
+    safety:
+      max_joint_velocity: [0.8, 0.8, 0.9, 0.7, 1.2, 1.3, 1.3] # max for iiwa [1.48, 1.48, 1.75, 1.31, 2.27, 2.36, 2.36]
+      limit_margin: 0.05
+      pose_timeout_ms: 50

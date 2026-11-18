@@ -1,0 +1,8 @@
+<library path="teleop_ur_rtde">
+  <class
+    name="ur"
+    type="teleop::UrRtdeRobot"
+    base_class_type="teleop::ManipulatorInterface">
+    <description>Universal Robots real robot via ur_rtde.</description>
+  </class>
+</library>

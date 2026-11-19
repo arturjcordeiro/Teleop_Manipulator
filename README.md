@@ -1,12 +1,16 @@
 # teleop_manipulators
 
-ROS 2 stack for teleoperating one or more manipulators with an OptiTrack
-motion-capture system. Everything — the node, the plugin contract, and every
-robot backend — lives in this single folder as a monorepo of colcon packages.
+ROS 2 stack for teleoperating one or more manipulators from a tracked tool pose
+— OptiTrack, mouse, phone, or game controller. Everything — the node, the
+plugin contract, and every robot backend — lives in this single folder as a
+monorepo of colcon packages.
 
 The node receives a tracked tool pose, maps it relative to the pose captured at
 clutch time, solves differential IK against the robot URDF, applies safety
 limits, and streams joint commands to a robot backend.
+
+Tested with **OptiTrack**, **mouse**, **phone** and **PS4 controller** as inputs,
+driving **UR5**, **UR10** and **KUKA iiwa 14** manipulators.
 
 ## Layout
 
@@ -14,11 +18,14 @@ limits, and streams joint commands to a robot backend.
 Teleop_Manipulator/
   teleop_manipulators_core/   # plugin contract (ManipulatorInterface, types)
   teleop_node/                # the teleop node (package: teleop_manipulators)
-  teleop_mock/                # mock backend
-  teleop_ur_sim/              # UR ros2_control simulation backend
-  teleop_ur_rtde/             # real UR via ur_rtde
-  teleop_kuka_udp/            # KUKA SmartServoPTP (UDP)
-  teleop_kuka_fri/            # KUKA FRI (KONI)
+  robot_drivers/
+    teleop_mock/              # mock backend
+    teleop_ur_sim/            # UR ros2_control simulation backend
+    teleop_ur_rtde/           # real UR via ur_rtde
+    teleop_kuka_udp/          # KUKA SmartServoPTP (UDP)
+    teleop_kuka_fri/          # KUKA FRI (KONI)
+  scripts/                    # mouse / phone / PS4 pose publishers
+  images/                     # input devices and tested manipulators
 ```
 
 | Package | Role |
@@ -36,6 +43,17 @@ Backends are loaded at runtime through `pluginlib`: the node only depends on
 a concrete driver. Adding a robot = a new driver package, no changes to the
 node (see "Adding a new backend").
 
+### Tested manipulators
+
+<p align="center">
+  <img src="images/ur5.png" alt="Universal Robots UR5" height="150">
+  &nbsp;&nbsp;&nbsp;
+  <img src="images/ur10.jpg" alt="Universal Robots UR10" height="150">
+  &nbsp;&nbsp;&nbsp;
+  <img src="images/kuka_iiwa_14_r820.jpeg" alt="KUKA iiwa 14 R820" height="150">
+</p>
+<p align="center"><sub>UR5 &nbsp;·&nbsp; UR10 &nbsp;·&nbsp; KUKA iiwa 14 R820</sub></p>
+
 | Backend | `robot.type` | Notes |
 | --- | --- | --- |
 | Mock | `mock` | Integrates commands; no hardware, no ROS controller |
@@ -47,8 +65,8 @@ node (see "Adding a new backend").
 ## How it works
 
 ```
-OptiTrack tool pose ──> PoseMapper ──> DiffIK ──> Safety ──> robot backend
- /optitrack/tool/pose   (clutch +     (Pinocchio)  (limits,    (pluginlib)
+Input device pose ──> PoseMapper ──> DiffIK ──> Safety ──> robot backend
+ (OptiTrack, mouse,     (clutch +     (Pinocchio)  (limits,    (pluginlib)
                          relative                   timeout)
                          mapping)
 ```
@@ -60,7 +78,7 @@ OptiTrack tool pose ──> PoseMapper ──> DiffIK ──> Safety ──> rob
   scaled, and applied to that anchor.
 - `DiffIK` solves damped-least-squares IK from the robot URDF.
 - `Safety` enforces joint velocity limits, position limits, and a pose timeout.
-- Missing or stale OptiTrack data, a lost robot connection, or clutch release
+- Missing or stale input data, a lost robot connection, or clutch release
   disengages teleoperation and stops the robot.
 
 ## Requirements
@@ -87,7 +105,7 @@ sudo apt install librtde librtde-dev
 ```bash
 cd ~/dev_ws
 # Optional: KUKA FRI client SDK (only needed for teleop_kuka_fri)
-vcs import src < src/Teleop_Manipulator/teleop_kuka_fri/fri.repos
+vcs import src < src/Teleop_Manipulator/robot_drivers/teleop_kuka_fri/fri.repos
 rosdep install --from-paths src --ignore-src -r -y
 colcon build
 source install/setup.bash
@@ -131,17 +149,57 @@ ros2 service call /teleop_manipulators_node/clutch \
 Engaging anchors the current tracked tool pose to the current robot TCP pose.
 Release, then re-engage, to reposition the tool without moving the robot.
 
+## Input devices
+
+All inputs publish the same `geometry_msgs/PoseStamped`, so the node does not
+care which one is connected. The helper scripts live in `scripts/`; run them
+from the repository root after sourcing the workspace.
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="images/optitrack_tool.jpeg" alt="OptiTrack tool" height="160"><br><b>OptiTrack</b><br><sub>6-DoF tracking</sub></td>
+    <td align="center"><img src="images/pc_mouse.jpeg" alt="PC mouse" height="160"><br><b>Mouse</b><br><sub>XY + wheel</sub></td>
+    <td align="center"><img src="images/phone.jpeg" alt="AR phone" height="180"><br><b>Phone</b><br><sub>ARCore / WebXR</sub></td>
+    <td align="center"><img src="images/controller.jpeg" alt="PS4 controller" height="160"><br><b>PS4</b><br><sub>velocity control</sub></td>
+  </tr>
+</table>
+
+```bash
+# Mouse: move XY, wheel Z; hold Ctrl to tilt; Space toggles the clutch.
+python3 scripts/mouse_pose_publisher_gripper_ur_caps.py
+
+# Phone: ARCore in Chrome. Open the URL printed by the script.
+# USB (recommended): adb reverse tcp:8080 tcp:8080, then http://localhost:8080
+python3 scripts/phone_ar_pose_publisher.py
+
+# PS4: sticks/D-pad move, right stick tilts, R2/L2 gripper, Cross = clutch.
+python3 scripts/ps4_pose_publisher.py
+```
+
+The scripts publish on `/probe/pose`, which matches the `ur5` and `ur_sim`
+configs. For the other configs, pass the optitrack topic explicitly:
+
+```bash
+python3 scripts/phone_ar_pose_publisher.py --ros-args -p topic:=/optitrack/tool/pose
+```
+
+OptiTrack and the phone have no clutch button: engage with the service above
+first. OptiTrack publishes through its own driver; set `pose_topic` to match.
+Mouse and PS4 can also drive a Robotiq gripper through the Robotiq URCap socket
+with `-p robot_ip:=<robot-ip>`. Extra Python deps: `pip install pynput pygame`
+and `sudo apt install python3-tk` (phone needs no extra Python packages).
+
 ### Input pose
 
 Publish `geometry_msgs/PoseStamped` on `pose_topic`
-(default `/optitrack/tool/pose`). The pose is expected in the OptiTrack world
-frame. The node does not look up TF; it uses the local receive time for the
-pose-timeout check, so a clock difference between OptiTrack and the robot
+(default `/optitrack/tool/pose`). The pose is expected in the input device's
+world frame. The node does not look up TF; it uses the local receive time for
+the pose-timeout check, so a clock difference between the tracker and the robot
 computer does not matter.
 
-`mapping.R_base_optitrack` (row-major 3x3) rotates OptiTrack coordinates into
-the robot base frame. The default identity assumes Z-up tracking data. For
-Motive's default Y-up stream use:
+`mapping.R_base_optitrack` (row-major 3x3) rotates the tracking frame into the
+robot base frame. The default identity assumes Z-up tracking data. For Motive's
+default Y-up stream use:
 
 ```yaml
 mapping:
@@ -157,7 +215,7 @@ Node parameters live in the driver's `config/*.yaml` under
 
 | Parameter | Description |
 | --- | --- |
-| `pose_topic` | OptiTrack tool pose topic (`geometry_msgs/PoseStamped`) |
+| `pose_topic` | Input pose topic (`geometry_msgs/PoseStamped`) |
 | `robot_description_topic` | URDF topic (`std_msgs/String`, transient-local) |
 | `publish_joint_states` | Publish measured joints on `/joint_states` (default `false`). Enable it for backends without a ROS driver (KUKA, mock); leave it off for UR where the driver already publishes |
 | `joint_state_publish_rate` | Maximum `/joint_states` rate in Hz (default `50`); `0` publishes every control cycle |
@@ -167,7 +225,7 @@ Node parameters live in the driver's `config/*.yaml` under
 | `robot.max_joint_step` | Reject position targets further than this from actual q [rad]. Raise for PTP tracking lag; too high weakens the discontinuity guard |
 | `ik.damping` | DLS damping; higher is safer near singularities |
 | `ik.gain_linear`, `ik.gain_angular` | P-gains on pose error [1/s] |
-| `mapping.R_base_optitrack` | 9 row-major values: OptiTrack -> robot base |
+| `mapping.R_base_optitrack` | 9 row-major values: tracking frame -> robot base |
 | `mapping.translation_scale` | Scale applied to tracked translation |
 | `safety.max_joint_velocity` | Per-joint velocity limits [rad/s] |
 | `safety.limit_margin` | Keep this far from URDF joint limits [rad] |
@@ -189,13 +247,14 @@ backend on `/joint_states`. Run `robot_state_publisher` with the KUKA URDF as
 well, otherwise there is no TF for RViz. Do not enable this for UR —
 `ur_robot_driver` already publishes `/joint_states`.
 
-## Adding a new backend
+<details>
+<summary><b>Adding a new backend</b></summary>
 
 A backend is a `pluginlib` plugin in its own package. The node only depends on
 `teleop_manipulators_core`, so a new manipulator is a new package — the node and
 the contract stay untouched. `teleop_mock` is the minimal template to copy.
 
-1. **Create the package** under the monorepo root, e.g. `teleop_fanuc/`
+1. **Create the package** under `robot_drivers/`, e.g. `robot_drivers/teleop_fanuc/`
    (`package.xml`, `CMakeLists.txt`, `src/`, `include/`).
 
 2. **Implement the interface** — subclass `teleop::ManipulatorInterface`. pluginlib
@@ -285,6 +344,8 @@ the contract stay untouched. `teleop_mock` is the minimal template to copy.
 
 5. The node picks it up with no code changes: build/install `teleop_fanuc`, set
    `robot.type: fanuc` in its config, and launch.
+
+</details>
 
 ## Examples
 

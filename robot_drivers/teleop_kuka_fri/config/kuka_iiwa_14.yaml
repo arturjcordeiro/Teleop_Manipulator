@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    pose_topic: /optitrack/tool/pose
+    pose_topic: /probe/pose
     robot_description_topic: /robot_description
     # No ROS driver publishes joint states for the KUKA, so the teleop node
     # republishes the measured state from its backend.

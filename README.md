@@ -9,7 +9,7 @@ The node receives a tracked tool pose, maps it relative to the pose captured at
 clutch time, solves differential IK against the robot URDF, applies safety
 limits, and streams joint commands to a robot backend.
 
-Tested with **OptiTrack**, **mouse**, **phone** and **PS4 controller** as inputs,
+Tested with **OptiTrack**, **mouse**, **phone** and **game controller** as inputs,
 driving **UR5**, **UR10** and **KUKA iiwa 14** manipulators.
 
 ## Layout
@@ -24,7 +24,7 @@ Teleop_Manipulator/
     teleop_ur_rtde/           # real UR via ur_rtde
     teleop_kuka_udp/          # KUKA SmartServoPTP (UDP)
     teleop_kuka_fri/          # KUKA FRI (KONI)
-  scripts/                    # mouse / phone / PS4 pose publishers
+  scripts/                    # mouse / phone / game controller pose publishers
   images/                     # input devices and tested manipulators
 ```
 
@@ -160,7 +160,7 @@ from the repository root after sourcing the workspace.
     <td align="center"><img src="images/optitrack_tool.jpeg" alt="OptiTrack tool" height="160"><br><b>OptiTrack</b><br><sub>6-DoF tracking</sub></td>
     <td align="center"><img src="images/pc_mouse.jpeg" alt="PC mouse" height="160"><br><b>Mouse</b><br><sub>XY + wheel</sub></td>
     <td align="center"><img src="images/phone.jpeg" alt="AR phone" height="180"><br><b>Phone</b><br><sub>ARCore / WebXR</sub></td>
-    <td align="center"><img src="images/controller.jpeg" alt="PS4 controller" height="160"><br><b>PS4</b><br><sub>velocity control</sub></td>
+    <td align="center"><img src="images/controller.jpeg" alt="Controller" height="160"><br><b>Game controller</b><br><sub>velocity control</sub></td>
   </tr>
 </table>
 
@@ -172,7 +172,7 @@ python3 scripts/mouse_pose_publisher_gripper_ur_caps.py
 # USB (recommended): adb reverse tcp:8080 tcp:8080, then http://localhost:8080
 python3 scripts/phone_ar_pose_publisher.py
 
-# PS4: sticks/D-pad move, right stick tilts, R2/L2 gripper, Cross = clutch.
+# Game controller: sticks/D-pad move, right stick tilts, R2/L2 gripper, Cross = clutch.
 python3 scripts/ps4_pose_publisher.py
 ```
 
@@ -185,9 +185,22 @@ python3 scripts/phone_ar_pose_publisher.py --ros-args -p topic:=/optitrack/tool/
 
 OptiTrack and the phone have no clutch button: engage with the service above
 first. OptiTrack publishes through its own driver; set `pose_topic` to match.
-Mouse and PS4 can also drive a Robotiq gripper through the Robotiq URCap socket
-with `-p robot_ip:=<robot-ip>`. Extra Python deps: `pip install pynput pygame`
-and `sudo apt install python3-tk` (phone needs no extra Python packages).
+Mouse and the game controller can also drive a Robotiq gripper through the Robotiq URCap socket
+with `-p robot_ip:=<robot-ip>`.
+
+Script dependencies (beyond `rclpy` and `geometry_msgs`):
+
+```bash
+# Mouse (pynput, tkinter) and game controller (pygame 2.x)
+pip install pynput pygame
+sudo apt install python3-tk
+
+# Phone: adb for the USB link, openssl to create the Wi-Fi HTTPS certificate
+sudo apt install adb openssl
+
+# Clutch service type used by mouse and game controller (default std_srvs/srv/SetBool)
+sudo apt install ros-$ROS_DISTRO-std-srvs
+```
 
 ### Input pose
 

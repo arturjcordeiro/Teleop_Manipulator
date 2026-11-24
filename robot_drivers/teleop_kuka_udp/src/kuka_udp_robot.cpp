@@ -310,10 +310,10 @@ bool KukaUdpRobot::sendTarget(const std::array<double, kuka::kDof> &q,
     const Eigen::Vector3d abc = kukaAbc(pose.linear());
 
     std::uint8_t buf[kuka::kCartesianPacketSize];
-    kuka::encodeCartesian(
-        pose.translation().x() * 1000.0, pose.translation().y() * 1000.0,
-        pose.translation().z() * 1000.0, abc[0], abc[1], abc[2],
-        kuka_speed_mm_s_, kuka_accel_mm_s2_, buf);
+    kuka::encodeCartesian(pose.translation().x() * 1000.0,
+                          pose.translation().y() * 1000.0,
+                          pose.translation().z() * 1000.0, abc[0], abc[1],
+                          abc[2], kuka_speed_mm_s_, kuka_accel_mm_s2_, buf);
     return sendPacket(buf, sizeof(buf));
   }
 

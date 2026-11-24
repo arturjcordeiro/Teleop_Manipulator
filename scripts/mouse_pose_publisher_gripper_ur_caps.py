@@ -50,7 +50,7 @@ Optional parameters:
                                (raise it if the gripper still steps back)
   -p grip_open_position:=0     0..255  (0 = fully open)
   -p grip_closed_position:=255 0..255  (255 = fully closed)
-  -p rate_hz:=50.0
+  -p rate_hz:=100.0
   -p service_name:=/teleop_manipulators_node/clutch
   -p service_type:=std_srvs/srv/SetBool   pkg/srv/Type (or pkg/Type)
                                            Space toggles True/False (if .data exists)
@@ -69,6 +69,7 @@ from pynput import keyboard
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import PoseStamped
 
 
@@ -296,7 +297,7 @@ class MousePosePublisher(Node):
         self.declare_parameter("rotate_key", "ctrl_l")
         self.declare_parameter("service_name", "/teleop_manipulators_node/clutch")
         self.declare_parameter("service_type", "std_srvs/srv/SetBool")
-        self.declare_parameter("rate_hz", 50.0)
+        self.declare_parameter("rate_hz", 100.0)
         self.declare_parameter("width", 1920)
         self.declare_parameter("height", 1080)
 
@@ -348,8 +349,13 @@ class MousePosePublisher(Node):
             )
 
         # ---- pose publisher ----
-        self.pub = self.create_publisher(PoseStamped, topic, 10)
-        self.timer = self.create_timer(1.0 / rate_hz, self.publish_pose)
+        # Best-effort, depth 1 (same QoS as the teleop subscriber): never queue
+        # stale poses. Published straight from the Tk tick (see spin()) instead
+        # of an rclpy timer, which only fires when spin_once() gets to it and
+        # stalls while Tk is busy with mouse events.
+        self.pub = self.create_publisher(PoseStamped, topic, qos_profile_sensor_data)
+        self.pub_period = 1.0 / rate_hz
+        self._last_pub = 0.0
 
         # ---- Space -> ROS 2 service ----
         self.service_name = str(self.get_parameter("service_name").value)
@@ -763,8 +769,8 @@ class MousePosePublisher(Node):
         msg = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = self.frame_id
-        msg.pose.position.x = -self.y
-        msg.pose.position.y = self.x
+        msg.pose.position.x = -self.x
+        msg.pose.position.y = -self.y
         msg.pose.position.z = self.z
         qx, qy, qz, qw = self.orientation()
         msg.pose.orientation.x = qx
@@ -778,6 +784,10 @@ class MousePosePublisher(Node):
         def tick():
             if not self.running:
                 return
+            now = time.monotonic()
+            if now - self._last_pub >= self.pub_period:
+                self._last_pub = now
+                self.publish_pose()
             rclpy.spin_once(self, timeout_sec=0.0)
             if self.rot_key:
                 self.begin_rotate()
@@ -786,7 +796,7 @@ class MousePosePublisher(Node):
             if self._service_pressed:
                 self._service_pressed = False
                 self.call_service()
-            self.root.after(5, tick)
+            self.root.after(2, tick)
 
         tick()
         self.root.mainloop()

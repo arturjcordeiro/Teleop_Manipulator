@@ -1,6 +1,14 @@
-# teleop_manipulators
+<div align="center">
 
-ROS 2 stack for teleoperating one or more manipulators from a tracked tool pose
+![REUSE banner](images/teleop_banner.png)
+
+[![License: BSD 3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
+
+# REUSE
+
+</div>
+
+**REUSE** is a ROS 2 framework for teleoperating one or more manipulators from a tracked tool pose
 — OptiTrack, mouse, phone, or game controller. Everything — the node, the
 plugin contract, and every robot backend — lives in this single folder as a
 monorepo of colcon packages.
@@ -81,14 +89,28 @@ Input device pose ──> PoseMapper ──> DiffIK ──> Safety ──> robot
 - Missing or stale input data, a lost robot connection, or clutch release
   disengages teleoperation and stops the robot.
 
-## Requirements
+## Dependencies
 
-- ROS 2 (tested on Jazzy)
-- Eigen3
-- Pinocchio
-- Per-driver requirements live in each driver package: `ur_rtde`
-  (`teleop_ur_rtde`), KUKA FRI client SDK (`teleop_kuka_fri`, via its
-  `fri.repos`), `ur_robot_driver` + `ur_description` (`teleop_ur_sim`).
+### Core (ROS 2 / C++)
+
+Installed by `rosdep` from the `package.xml` files, except where noted:
+
+| Package | Used for |
+| --- | --- |
+| ROS 2 (tested on Jazzy) | `rclcpp`, `rclcpp_components`, `launch`, `launch_ros` |
+| `geometry_msgs`, `sensor_msgs`, `std_msgs`, `std_srvs` | input pose, joint states, robot description, clutch service |
+| `pluginlib` | loading the robot backends at runtime |
+| Eigen3 | linear algebra |
+| Pinocchio | kinematics and differential IK |
+
+### Robot backends (only the drivers you build)
+
+| Driver | Dependency | Used for |
+| --- | --- | --- |
+| `teleop_ur_rtde` | `ur_rtde` (`librtde`, `librtde-dev`) | real UR robots over RTDE |
+| `teleop_ur_sim` | `ur_robot_driver`, `ur_description` | UR ros2_control simulation |
+| `teleop_kuka_fri` | KUKA FRI Client SDK (via `fri.repos`) | KUKA FRI (KONI) |
+| `teleop_kuka_udp`, `teleop_mock` | none beyond the core | |
 
 ```bash
 # Pinocchio
@@ -98,6 +120,21 @@ sudo apt install ros-$ROS_DISTRO-pinocchio
 sudo add-apt-repository ppa:sdurobotics/ur-rtde
 sudo apt update
 sudo apt install librtde librtde-dev
+```
+
+### Input scripts (`scripts/`)
+
+Beyond `rclpy`, `geometry_msgs` and `std_srvs`:
+
+| Script | Dependency | Used for |
+| --- | --- | --- |
+| Mouse | `pynput`, `python3-tk` | keyboard keys, cursor window |
+| Game controller | `pygame` 2.x | SDL game-controller input |
+| Phone | `adb`, `openssl` | USB link, HTTPS certificate for Wi-Fi |
+
+```bash
+pip install pynput pygame
+sudo apt install python3-tk adb openssl
 ```
 
 ## Build
@@ -188,19 +225,7 @@ first. OptiTrack publishes through its own driver; set `pose_topic` to match.
 Mouse and the game controller can also drive a Robotiq gripper through the Robotiq URCap socket
 with `-p robot_ip:=<robot-ip>`.
 
-Script dependencies (beyond `rclpy` and `geometry_msgs`):
-
-```bash
-# Mouse (pynput, tkinter) and game controller (pygame 2.x)
-pip install pynput pygame
-sudo apt install python3-tk
-
-# Phone: adb for the USB link, openssl to create the Wi-Fi HTTPS certificate
-sudo apt install adb openssl
-
-# Clutch service type used by mouse and game controller (default std_srvs/srv/SetBool)
-sudo apt install ros-$ROS_DISTRO-std-srvs
-```
+Script dependencies are listed in [Dependencies](#input-scripts-scripts).
 
 ### Input pose
 
@@ -388,3 +413,43 @@ colcon test-result --verbose
 
 Unit tests cover the pose mapper, differential IK, the KUKA UDP wire protocol
 (`teleop_kuka_udp`), and plugin loading (`teleop_mock`).
+
+## License
+
+Licensed under the **BSD 3-Clause License**, see [LICENSE](LICENSE) for the
+full text.
+
+`teleop_kuka_fri` builds against the KUKA FRI Client SDK, which is not part of
+this repository (`fri.repos` fetches it). The SDK has its own KUKA license: it
+may only be used with KUKA products, and modified SDK source must be marked
+and made available on request.
+
+## Community standards and contribution
+
+This repository follows INESC TEC's organisation-wide governance documents.
+Please review these before contributing:
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Security Issue Reporting Template](docs/reporting_template.md)
+- [Security Policy](SECURITY.md)
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to
+set up a development environment, coding conventions, and the pull-request
+process. By participating, you agree to abide by the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+To report a security vulnerability, see [SECURITY.md](SECURITY.md) instead of
+opening a public issue.
+
+## Credits and acknowledgements
+
+- Artur Cordeiro – Developer, INESC TEC
+- Pedro Dias – Developer, INESC TEC
+
+## Contacts
+
+For support or inquiries, contact:
+
+- Artur Cordeiro – <artur.cordeiro@inesctec.pt>
+- Pedro Dias – <pedro.dias@inesctec.pt>
